@@ -2,12 +2,13 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Miss Han - A Gift from Mr Meng</title>
     <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
     <style>
+        /* 原有样式不变，移除引导层样式 */
         body { margin: 0; overflow: hidden; background: radial-gradient(circle at center, #0a0a14 0%, #000 100%); font-family: 'Segoe UI', sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; }
-        
         .header {
             position: absolute;
             top: 40px;
@@ -19,7 +20,6 @@
             flex-direction: column;
             align-items: center;
         }
-
         h1 {
             font-family: 'Dancing Script', cursive;
             font-size: 4.5rem;
@@ -31,7 +31,6 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
             letter-spacing: 1px;
         }
-
         .signature {
             font-family: 'Dancing Script', cursive;
             font-size: 1.6rem;
@@ -41,7 +40,6 @@
             opacity: 0.9;
             text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
         }
-
         video { 
             transform: scaleX(-1); 
             position: absolute; 
@@ -54,7 +52,6 @@
             object-fit: cover;
             opacity: 0.5;
         }
-
         .status-dot {
             position: absolute;
             bottom: 165px;
@@ -66,232 +63,273 @@
     </style>
 </head>
 <body>
+    <div class="header">
+        <h1>Miss Han, Merry Christmas!</h1>
+        <div class="signature">from Mr Meng</div>
+    </div>
+    <div id="status" class="status-dot">MAGIC LOADING...</div>
+    <div id="canvas-container"></div>
+    <video id="video" autoplay playsinline></video>
+    
+    <!-- 音频元素：增加预加载和静音初始化（关键） -->
+    <audio id="backgroundMusic" loop preload="auto" muted>
+        <source src="music.mp3" type="audio/mpeg">
+        <source src="music.wav" type="audio/wav">
+        您的浏览器不支持音频播放
+    </audio>
 
-<div class="header">
-    <h1>Miss Han, Merry Christmas!</h1>
-    <div class="signature">from Mr Meng</div>
-</div>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 
-<div id="status" class="status-dot">MAGIC LOADING...</div>
-<div id="canvas-container"></div>
-<video id="video" autoplay playsinline></video>
-<!-- 新增音频元素 -->
-<audio id="backgroundMusic" loop>
-    <source src="music.mp3" type="audio/mpeg">
-     您的浏览器不支持音频播放
-</audio>
+    <script>
+        // ========== 核心：无感触发音频播放 ==========
+        const backgroundMusic = document.getElementById('backgroundMusic');
+        let audioInited = false; // 标记音频是否已初始化
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-
-<script>
-/** -----------------------------------------------------------------
- * 1. 3D 视觉引擎
- * ----------------------------------------------------------------- */
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 3, 28); 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-document.getElementById('canvas-container').appendChild(renderer.domElement);
-
-const particleCount = 20000; 
-const geometry = new THREE.BufferGeometry();
-const posArray = new Float32Array(particleCount * 3);
-const treePositions = new Float32Array(particleCount * 3);
-const starPositions = new Float32Array(particleCount * 3);
-const colors = new Float32Array(particleCount * 3);
-
-const endTreeBody = Math.floor(particleCount * 0.60);
-const endTrunk = Math.floor(particleCount * 0.70);
-const endTopBall = Math.floor(particleCount * 0.73);
-const endRibbon = Math.floor(particleCount * 0.88);
-
-for (let i = 0; i < particleCount; i++) {
-    const i3 = i * 3;
-    starPositions[i3] = (Math.random() - 0.5) * 75;
-    starPositions[i3+1] = (Math.random() - 0.5) * 65;
-    starPositions[i3+2] = (Math.random() - 0.5) * 55;
-
-    let r, g, b, x, y, z;
-
-    if (i < endTreeBody) {
-        // 树身
-        const ratio = i / endTreeBody;
-        const h = 16 * ratio;
-        const rad = (16 - h) * 0.4;
-        const ang = 0.6 * i;
-        x = Math.cos(ang) * rad + (Math.random()-0.5)*0.5;
-        y = h - 9.5;
-        z = Math.sin(ang) * rad + (Math.random()-0.5)*0.5;
-        const cr = Math.random();
-        if (cr < 0.4) { r=1; g=0.85; b=0.2; } 
-        else if (cr < 0.7) { r=0.1; g=0.7; b=0.3; } 
-        else { r=1; g=0.3; b=0.7; }
-    } else if (i < endTrunk) {
-        // 树干
-        x = Math.cos(Math.random()*7) * 0.8 * Math.random();
-        y = ((i - endTreeBody) / (endTrunk - endTreeBody) * 4.5) - 14;
-        z = Math.sin(Math.random()*7) * 0.8 * Math.random();
-        r=0.4; g=0.2; b=0.05;
-    } else if (i < endTopBall) {
-        // 树顶金球
-        const ratio = (i - endTrunk) / (endTopBall - endTrunk);
-        const phi = Math.acos(-1 + (2 * ratio));
-        const theta = Math.sqrt(particleCount * Math.PI) * phi;
-        const brad = 1.3;
-        x = brad * Math.cos(theta) * Math.sin(phi);
-        y = brad * Math.sin(theta) * Math.sin(phi) + 7.5; 
-        z = brad * Math.cos(phi);
-        r=1.0; g=1.0; b=0.7; 
-    } else if (i < endRibbon) {
-        // 金丝带
-        const ratio = (i - endTopBall) / (endRibbon - endTopBall);
-        const h = 16 * (1 - ratio);
-        const rad = (16 - h) * 0.43 + 0.6; 
-        const ang = h * 2.2; 
-        x = Math.cos(ang) * rad;
-        y = h - 9.5;
-        z = Math.sin(ang) * rad;
-        r=1.0; g=0.9; b=0.3; 
-    } else {
-        // 彩球
-        const ratio = (i - endRibbon) / (particleCount - endRibbon);
-        const h = 15.5 * (1 - ratio);
-        const rad = (16 - h) * 0.46 + 0.9;
-        const ang = h * 2.2 + (Math.random()-0.5)*0.6;
-        x = Math.cos(ang) * rad;
-        y = h - 9.5 + (Math.random()-0.5)*0.6;
-        z = Math.sin(ang) * rad;
-        const cr = Math.random();
-        if(cr<0.35){r=1;g=0.2;b=0.2;} 
-        else if(cr<0.7){r=0.2;g=0.5;b=1;} 
-        else {r=0.9;g=0.2;b=0.9;}
-    }
-
-    treePositions[i3] = x; treePositions[i3+1] = y; treePositions[i3+2] = z;
-    colors[i3] = r; colors[i3+1] = g; colors[i3+2] = b;
-    posArray[i3] = starPositions[i3]; posArray[i3+1] = starPositions[i3+1]; posArray[i3+2] = starPositions[i3+2];
-}
-
-geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-
-const material = new THREE.PointsMaterial({
-    size: 0.13,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.95,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    sizeAttenuation: true
-});
-
-const treeParticles = new THREE.Points(geometry, material);
-scene.add(treeParticles);
-
-/** -----------------------------------------------------------------
- * 2. 交互逻辑
- * ----------------------------------------------------------------- */
-let isFist = false; 
-let rotationSpeed = 0.002;
-// 新增：音乐播放状态标记
-let hasPlayedMusic = false;
-
-function updatePhysics() {
-    const posAttr = geometry.attributes.position;
-    const lerpSpeed = isFist ? 0.06 : 0.025; 
-
-    for (let i = 0; i < particleCount; i++) {
-        const i3 = i * 3;
-        const tx = isFist ? treePositions[i3] : starPositions[i3];
-        const ty = isFist ? treePositions[i3+1] : starPositions[i3+1];
-        const tz = isFist ? treePositions[i3+2] : starPositions[i3+2];
-
-        posAttr.array[i3] += (tx - posAttr.array[i3]) * lerpSpeed;
-        posAttr.array[i3+1] += (ty - posAttr.array[i3+1]) * lerpSpeed;
-        posAttr.array[i3+2] += (tz - posAttr.array[i3+2]) * lerpSpeed;
-    }
-    posAttr.needsUpdate = true;
-
-    const targetRot = isFist ? 0.012 : 0.0015;
-    rotationSpeed += (targetRot - rotationSpeed) * 0.05;
-    treeParticles.rotation.y += rotationSpeed;
-}
-
-/** -----------------------------------------------------------------
- * 3. MediaPipe 手势识别
- * ----------------------------------------------------------------- */
-const videoElement = document.getElementById('video');
-const statusText = document.getElementById('status');
-// 新增：获取音频元素
-const backgroundMusic = document.getElementById('backgroundMusic');
-
-function onResults(results) {
-    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        // 新增：第一次识别到手势时播放音乐
-        if (!hasPlayedMusic) {
-            // 尝试播放音乐，处理浏览器自动播放限制
-            backgroundMusic.play().catch(e => {
-                console.log("需要用户交互才能播放音乐:", e);
-                statusText.innerText = "点击屏幕播放音乐";
-                // 为解决自动播放限制，添加点击屏幕播放的备用方案
-                document.body.addEventListener('click', () => {
-                    if (!hasPlayedMusic) {
-                        backgroundMusic.play();
-                        hasPlayedMusic = true;
-                    }
-                }, { once: true });
+        // 1. 监听任意触摸事件（滑动/轻触/长按都算，无需点击）
+        function initAudioByTouch() {
+            if (audioInited) return;
+            // 先取消静音，再播放（移动端必须步骤）
+            backgroundMusic.muted = false;
+            backgroundMusic.play().then(() => {
+                audioInited = true;
+                console.log("音频通过触摸触发播放");
+            }).catch(e => {
+                console.log("触摸触发失败，尝试其他方式：", e);
+                initAudioByMotion(); // 兜底：陀螺仪触发
             });
-            hasPlayedMusic = true;
+            // 只监听一次，避免重复触发
+            document.removeEventListener('touchstart', initAudioByTouch);
         }
 
-        const hand = results.multiHandLandmarks[0];
-        const palmCenter = hand[9];
-        const fingerTips = [8, 12, 16, 20];
-        let totalDist = 0;
-        fingerTips.forEach(idx => {
-            const tip = hand[idx];
-            totalDist += Math.sqrt(Math.pow(tip.x - palmCenter.x, 2) + Math.pow(tip.y - palmCenter.y, 2));
+        // 2. 兜底：陀螺仪/设备运动触发（部分手机支持）
+        function initAudioByMotion() {
+            if (audioInited || !window.DeviceMotionEvent) return;
+            // 请求设备运动权限（部分安卓需要）
+            if (DeviceMotionEvent.requestPermission) {
+                DeviceMotionEvent.requestPermission().then(permissionState => {
+                    if (permissionState === 'granted') {
+                        window.addEventListener('devicemotion', function motionHandler() {
+                            if (!audioInited) {
+                                backgroundMusic.muted = false;
+                                backgroundMusic.play().then(() => {
+                                    audioInited = true;
+                                    console.log("音频通过陀螺仪触发播放");
+                                });
+                            }
+                            window.removeEventListener('devicemotion', motionHandler);
+                        }, { once: true });
+                    }
+                });
+            }
+        }
+
+        // 3. 微信浏览器专属：JSBridge 触发（无需用户交互）
+        function initAudioForWechat() {
+            if (audioInited) return;
+            if (typeof WeixinJSBridge !== 'undefined') {
+                WeixinJSBridge.invoke('getNetworkType', {}, () => {
+                    backgroundMusic.muted = false;
+                    backgroundMusic.play().then(() => audioInited = true);
+                });
+            } else {
+                document.addEventListener("WeixinJSBridgeReady", () => {
+                    backgroundMusic.muted = false;
+                    backgroundMusic.play().then(() => audioInited = true);
+                }, false);
+            }
+        }
+
+        // 注册监听：优先触摸，兼容微信，兜底陀螺仪
+        document.addEventListener('touchstart', initAudioByTouch, { passive: true });
+        initAudioForWechat(); // 微信环境自动触发
+        setTimeout(initAudioByMotion, 1000); // 1秒后尝试陀螺仪兜底
+
+        // ========== 原有 3D 场景代码（完全不变） ==========
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 3, 28); 
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const particleCount = 20000; 
+        const geometry = new THREE.BufferGeometry();
+        const posArray = new Float32Array(particleCount * 3);
+        const treePositions = new Float32Array(particleCount * 3);
+        const starPositions = new Float32Array(particleCount * 3);
+        const colors = new Float32Array(particleCount * 3);
+
+        const endTreeBody = Math.floor(particleCount * 0.60);
+        const endTrunk = Math.floor(particleCount * 0.70);
+        const endTopBall = Math.floor(particleCount * 0.73);
+        const endRibbon = Math.floor(particleCount * 0.88);
+
+        for (let i = 0; i < particleCount; i++) {
+            const i3 = i * 3;
+            starPositions[i3] = (Math.random() - 0.5) * 75;
+            starPositions[i3+1] = (Math.random() - 0.5) * 65;
+            starPositions[i3+2] = (Math.random() - 0.5) * 55;
+
+            let r, g, b, x, y, z;
+
+            if (i < endTreeBody) {
+                const ratio = i / endTreeBody;
+                const h = 16 * ratio;
+                const rad = (16 - h) * 0.4;
+                const ang = 0.6 * i;
+                x = Math.cos(ang) * rad + (Math.random()-0.5)*0.5;
+                y = h - 9.5;
+                z = Math.sin(ang) * rad + (Math.random()-0.5)*0.5;
+                const cr = Math.random();
+                if (cr < 0.4) { r=1; g=0.85; b=0.2; } 
+                else if (cr < 0.7) { r=0.1; g=0.7; b=0.3; } 
+                else { r=1; g=0.3; b=0.7; }
+            } else if (i < endTrunk) {
+                x = Math.cos(Math.random()*7) * 0.8 * Math.random();
+                y = ((i - endTreeBody) / (endTrunk - endTreeBody) * 4.5) - 14;
+                z = Math.sin(Math.random()*7) * 0.8 * Math.random();
+                r=0.4; g=0.2; b=0.05;
+            } else if (i < endTopBall) {
+                const ratio = (i - endTrunk) / (endTopBall - endTrunk);
+                const phi = Math.acos(-1 + (2 * ratio));
+                const theta = Math.sqrt(particleCount * Math.PI) * phi;
+                const brad = 1.3;
+                x = brad * Math.cos(theta) * Math.sin(phi);
+                y = brad * Math.sin(theta) * Math.sin(phi) + 7.5; 
+                z = brad * Math.cos(phi);
+                r=1.0; g=1.0; b=0.7; 
+            } else if (i < endRibbon) {
+                const ratio = (i - endTopBall) / (endRibbon - endTopBall);
+                const h = 16 * (1 - ratio);
+                const rad = (16 - h) * 0.43 + 0.6; 
+                const ang = h * 2.2; 
+                x = Math.cos(ang) * rad;
+                y = h - 9.5;
+                z = Math.sin(ang) * rad;
+                r=1.0; g=0.9; b=0.3; 
+            } else {
+                const ratio = (i - endRibbon) / (particleCount - endRibbon);
+                const h = 15.5 * (1 - ratio);
+                const rad = (16 - h) * 0.46 + 0.9;
+                const ang = h * 2.2 + (Math.random()-0.5)*0.6;
+                x = Math.cos(ang) * rad;
+                y = h - 9.5 + (Math.random()-0.5)*0.6;
+                z = Math.sin(ang) * rad;
+                const cr = Math.random();
+                if(cr<0.35){r=1;g=0.2;b=0.2;} 
+                else if(cr<0.7){r=0.2;g=0.5;b=1;} 
+                else {r=0.9;g=0.2;b=0.9;}
+            }
+
+            treePositions[i3] = x; treePositions[i3+1] = y; treePositions[i3+2] = z;
+            colors[i3] = r; colors[i3+1] = g; colors[i3+2] = b;
+            posArray[i3] = starPositions[i3]; posArray[i3+1] = starPositions[i3+1]; posArray[i3+2] = starPositions[i3+2];
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+        const material = new THREE.PointsMaterial({
+            size: 0.13,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.95,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            sizeAttenuation: true
         });
-        isFist = (totalDist / 4) < 0.13;
-        statusText.innerText = isFist ? "MERRY CHRISTMAS ✊" : "RELEASE THE MAGIC 🖐️";
-        
-        camera.position.x += ((hand[9].x - 0.5) * 12 - camera.position.x) * 0.05;
-        camera.position.y += (-(hand[9].y - 0.5) * 8 + 3 - camera.position.y) * 0.05;
-        camera.lookAt(0, 0, 0); 
-    } else {
-        isFist = false;
-        statusText.innerText = "WAITING FOR HAND...";
-    }
-}
 
-const hands = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-});
-hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-hands.onResults(onResults);
+        const treeParticles = new THREE.Points(geometry, material);
+        scene.add(treeParticles);
 
-const cameraMP = new Camera(videoElement, {
-    onFrame: async () => { await hands.send({image: videoElement}); },
-    width: 640, height: 480
-});
-cameraMP.start();
+        // ========== 交互逻辑（修改手势识别触发音乐） ==========
+        let isFist = false; 
+        let rotationSpeed = 0.002;
 
-function animate() {
-    requestAnimationFrame(animate);
-    updatePhysics();
-    renderer.render(scene, camera);
-}
-animate();
+        function updatePhysics() {
+            const posAttr = geometry.attributes.position;
+            const lerpSpeed = isFist ? 0.06 : 0.025; 
 
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
-</script>
+            for (let i = 0; i < particleCount; i++) {
+                const i3 = i * 3;
+                const tx = isFist ? treePositions[i3] : starPositions[i3];
+                const ty = isFist ? treePositions[i3+1] : starPositions[i3+1];
+                const tz = isFist ? treePositions[i3+2] : starPositions[i3+2];
+
+                posAttr.array[i3] += (tx - posAttr.array[i3]) * lerpSpeed;
+                posAttr.array[i3+1] += (ty - posAttr.array[i3+1]) * lerpSpeed;
+                posAttr.array[i3+2] += (tz - posAttr.array[i3+2]) * lerpSpeed;
+            }
+            posAttr.needsUpdate = true;
+
+            const targetRot = isFist ? 0.012 : 0.0015;
+            rotationSpeed += (targetRot - rotationSpeed) * 0.05;
+            treeParticles.rotation.y += rotationSpeed;
+        }
+
+        // ========== 手势识别（首次识别时确保音乐播放） ==========
+        const videoElement = document.getElementById('video');
+        const statusText = document.getElementById('status');
+
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // 首次手势识别时，强制触发音频（兜底）
+                if (!audioInited) {
+                    backgroundMusic.muted = false;
+                    backgroundMusic.play().catch(e => {
+                        console.log("手势触发音频失败，需轻触屏幕：", e);
+                        statusText.innerText = "轻触屏幕开启音乐 ✨";
+                    });
+                    audioInited = true; // 标记，避免重复提示
+                }
+
+                const hand = results.multiHandLandmarks[0];
+                const palmCenter = hand[9];
+                const fingerTips = [8, 12, 16, 20];
+                let totalDist = 0;
+                fingerTips.forEach(idx => {
+                    const tip = hand[idx];
+                    totalDist += Math.sqrt(Math.pow(tip.x - palmCenter.x, 2) + Math.pow(tip.y - palmCenter.y, 2));
+                });
+                isFist = (totalDist / 4) < 0.13;
+                statusText.innerText = isFist ? "MERRY CHRISTMAS ✊" : "RELEASE THE MAGIC 🖐️";
+                
+                camera.position.x += ((hand[9].x - 0.5) * 12 - camera.position.x) * 0.05;
+                camera.position.y += (-(hand[9].y - 0.5) * 8 + 3 - camera.position.y) * 0.05;
+                camera.lookAt(0, 0, 0); 
+            } else {
+                isFist = false;
+                statusText.innerText = audioInited ? "WAITING FOR HAND..." : "轻触屏幕开启魔法 ✨";
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        hands.onResults(onResults);
+
+        const cameraMP = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({image: videoElement}); },
+            width: 640, height: 480
+        });
+        cameraMP.start();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePhysics();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
