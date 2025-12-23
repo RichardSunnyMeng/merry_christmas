@@ -29,6 +29,7 @@
             -webkit-text-fill-color: transparent;
             filter: drop-shadow(0 0 8px rgba(0,0,0,0.8));
             text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            letter-spacing: 1px;
         }
 
         .signature {
@@ -60,22 +61,24 @@
             right: 30px;
             color: rgba(255,255,255,0.6);
             font-size: 0.7rem;
+            letter-spacing: 1px;
         }
     </style>
 </head>
-<body onclick="startAudio()">
+<body>
 
 <div class="header">
     <h1>Miss Han, Merry Christmas!</h1>
     <div class="signature">from Mr Meng</div>
 </div>
 
-<div id="status" class="status-dot">TAP TO START MAGIC...</div>
+<div id="status" class="status-dot">MAGIC LOADING...</div>
 <div id="canvas-container"></div>
 <video id="video" autoplay playsinline></video>
-
-<audio id="bgm" loop>
+<!-- 新增音频元素 -->
+<audio id="backgroundMusic" loop>
     <source src="music.mp3" type="audio/mpeg">
+     您的浏览器不支持音频播放
 </audio>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
@@ -84,21 +87,7 @@
 
 <script>
 /** -----------------------------------------------------------------
- * 1. 音乐控制逻辑
- * ----------------------------------------------------------------- */
-const audio = document.getElementById('bgm');
-let audioStarted = false;
-
-function startAudio() {
-    if (!audioStarted) {
-        audio.play().catch(e => console.log("Audio play failed", e));
-        audioStarted = true;
-        document.getElementById('status').innerText = "MAGIC ACTIVE";
-    }
-}
-
-/** -----------------------------------------------------------------
- * 2. 3D 视觉引擎
+ * 1. 3D 视觉引擎
  * ----------------------------------------------------------------- */
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -127,7 +116,9 @@ for (let i = 0; i < particleCount; i++) {
     starPositions[i3+2] = (Math.random() - 0.5) * 55;
 
     let r, g, b, x, y, z;
+
     if (i < endTreeBody) {
+        // 树身
         const ratio = i / endTreeBody;
         const h = 16 * ratio;
         const rad = (16 - h) * 0.4;
@@ -140,19 +131,23 @@ for (let i = 0; i < particleCount; i++) {
         else if (cr < 0.7) { r=0.1; g=0.7; b=0.3; } 
         else { r=1; g=0.3; b=0.7; }
     } else if (i < endTrunk) {
+        // 树干
         x = Math.cos(Math.random()*7) * 0.8 * Math.random();
         y = ((i - endTreeBody) / (endTrunk - endTreeBody) * 4.5) - 14;
         z = Math.sin(Math.random()*7) * 0.8 * Math.random();
         r=0.4; g=0.2; b=0.05;
     } else if (i < endTopBall) {
+        // 树顶金球
         const ratio = (i - endTrunk) / (endTopBall - endTrunk);
         const phi = Math.acos(-1 + (2 * ratio));
         const theta = Math.sqrt(particleCount * Math.PI) * phi;
-        x = 1.3 * Math.cos(theta) * Math.sin(phi);
-        y = 1.3 * Math.sin(theta) * Math.sin(phi) + 7.5; 
-        z = 1.3 * Math.cos(phi);
+        const brad = 1.3;
+        x = brad * Math.cos(theta) * Math.sin(phi);
+        y = brad * Math.sin(theta) * Math.sin(phi) + 7.5; 
+        z = brad * Math.cos(phi);
         r=1.0; g=1.0; b=0.7; 
     } else if (i < endRibbon) {
+        // 金丝带
         const ratio = (i - endTopBall) / (endRibbon - endTopBall);
         const h = 16 * (1 - ratio);
         const rad = (16 - h) * 0.43 + 0.6; 
@@ -162,6 +157,7 @@ for (let i = 0; i < particleCount; i++) {
         z = Math.sin(ang) * rad;
         r=1.0; g=0.9; b=0.3; 
     } else {
+        // 彩球
         const ratio = (i - endRibbon) / (particleCount - endRibbon);
         const h = 15.5 * (1 - ratio);
         const rad = (16 - h) * 0.46 + 0.9;
@@ -174,6 +170,7 @@ for (let i = 0; i < particleCount; i++) {
         else if(cr<0.7){r=0.2;g=0.5;b=1;} 
         else {r=0.9;g=0.2;b=0.9;}
     }
+
     treePositions[i3] = x; treePositions[i3+1] = y; treePositions[i3+2] = z;
     colors[i3] = r; colors[i3+1] = g; colors[i3+2] = b;
     posArray[i3] = starPositions[i3]; posArray[i3+1] = starPositions[i3+1]; posArray[i3+2] = starPositions[i3+2];
@@ -181,20 +178,75 @@ for (let i = 0; i < particleCount; i++) {
 
 geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
 geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-const material = new THREE.PointsMaterial({ size: 0.13, vertexColors: true, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+
+const material = new THREE.PointsMaterial({
+    size: 0.13,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.95,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    sizeAttenuation: true
+});
+
 const treeParticles = new THREE.Points(geometry, material);
 scene.add(treeParticles);
 
 /** -----------------------------------------------------------------
- * 3. 交互逻辑与 AI
+ * 2. 交互逻辑
  * ----------------------------------------------------------------- */
 let isFist = false; 
 let rotationSpeed = 0.002;
+// 新增：音乐播放状态标记
+let hasPlayedMusic = false;
+
+function updatePhysics() {
+    const posAttr = geometry.attributes.position;
+    const lerpSpeed = isFist ? 0.06 : 0.025; 
+
+    for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        const tx = isFist ? treePositions[i3] : starPositions[i3];
+        const ty = isFist ? treePositions[i3+1] : starPositions[i3+1];
+        const tz = isFist ? treePositions[i3+2] : starPositions[i3+2];
+
+        posAttr.array[i3] += (tx - posAttr.array[i3]) * lerpSpeed;
+        posAttr.array[i3+1] += (ty - posAttr.array[i3+1]) * lerpSpeed;
+        posAttr.array[i3+2] += (tz - posAttr.array[i3+2]) * lerpSpeed;
+    }
+    posAttr.needsUpdate = true;
+
+    const targetRot = isFist ? 0.012 : 0.0015;
+    rotationSpeed += (targetRot - rotationSpeed) * 0.05;
+    treeParticles.rotation.y += rotationSpeed;
+}
+
+/** -----------------------------------------------------------------
+ * 3. MediaPipe 手势识别
+ * ----------------------------------------------------------------- */
+const videoElement = document.getElementById('video');
+const statusText = document.getElementById('status');
+// 新增：获取音频元素
+const backgroundMusic = document.getElementById('backgroundMusic');
 
 function onResults(results) {
     if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-        // 第一次检测到手时也尝试触发音乐（以防用户没点击屏幕）
-        if (!audioStarted) startAudio();
+        // 新增：第一次识别到手势时播放音乐
+        if (!hasPlayedMusic) {
+            // 尝试播放音乐，处理浏览器自动播放限制
+            backgroundMusic.play().catch(e => {
+                console.log("需要用户交互才能播放音乐:", e);
+                statusText.innerText = "点击屏幕播放音乐";
+                // 为解决自动播放限制，添加点击屏幕播放的备用方案
+                document.body.addEventListener('click', () => {
+                    if (!hasPlayedMusic) {
+                        backgroundMusic.play();
+                        hasPlayedMusic = true;
+                    }
+                }, { once: true });
+            });
+            hasPlayedMusic = true;
+        }
 
         const hand = results.multiHandLandmarks[0];
         const palmCenter = hand[9];
@@ -205,16 +257,20 @@ function onResults(results) {
             totalDist += Math.sqrt(Math.pow(tip.x - palmCenter.x, 2) + Math.pow(tip.y - palmCenter.y, 2));
         });
         isFist = (totalDist / 4) < 0.13;
+        statusText.innerText = isFist ? "MERRY CHRISTMAS ✊" : "RELEASE THE MAGIC 🖐️";
         
         camera.position.x += ((hand[9].x - 0.5) * 12 - camera.position.x) * 0.05;
         camera.position.y += (-(hand[9].y - 0.5) * 8 + 3 - camera.position.y) * 0.05;
         camera.lookAt(0, 0, 0); 
     } else {
         isFist = false;
+        statusText.innerText = "WAITING FOR HAND...";
     }
 }
 
-const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
 hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
 hands.onResults(onResults);
 
@@ -226,17 +282,7 @@ cameraMP.start();
 
 function animate() {
     requestAnimationFrame(animate);
-    const posAttr = geometry.attributes.position;
-    const lerpSpeed = isFist ? 0.06 : 0.025; 
-    for (let i = 0; i < particleCount; i++) {
-        const i3 = i * 3;
-        posAttr.array[i3] += ((isFist ? treePositions[i3] : starPositions[i3]) - posAttr.array[i3]) * lerpSpeed;
-        posAttr.array[i3+1] += ((isFist ? treePositions[i3+1] : starPositions[i3+1]) - posAttr.array[i3+1]) * lerpSpeed;
-        posAttr.array[i3+2] += ((isFist ? treePositions[i3+2] : starPositions[i3+2]) - posAttr.array[i3+2]) * lerpSpeed;
-    }
-    posAttr.needsUpdate = true;
-    rotationSpeed += ((isFist ? 0.012 : 0.0015) - rotationSpeed) * 0.05;
-    treeParticles.rotation.y += rotationSpeed;
+    updatePhysics();
     renderer.render(scene, camera);
 }
 animate();
